@@ -178,7 +178,64 @@ Acesse http://localhost:8081, conforme a variável `ATIVIDADE_PORT_HOST` do `.en
 
 A proposta é implementar testes para listagem inicial, cadastro com atualização da tabela, persistência após recarregar a página, campos inválidos, RA duplicado e falhas da API. A página oferece labels acessíveis e atributos `data-testid` para localizar os elementos.
 
-A suíte existente em `e2e/` e o ambiente `compose.e2e.yml` continuam destinados ao Laboratório REST. Para testar a nova interface, prepare uma configuração e um ambiente com banco isolado para a atividade. Consulte [atividade/README.md](atividade/README.md) para os comportamentos esperados e os seletores disponíveis.
+A suíte existente em `e2e/` e o ambiente `compose.e2e.yml` continuam destinados ao Laboratório REST. Para testar a interface de cadastro de alunos (`atividade/`), foi criada uma suíte própria em `e2e-atividade/` com ambiente Docker e banco isolados. Consulte [atividade/README.md](atividade/README.md) para os comportamentos esperados e os seletores disponíveis.
+
+### Executar os testes E2E da atividade (`atividade/`)
+
+Requisitos:
+
+- Node.js 20 ou superior (recomendado Node.js 24 LTS) e npm.
+- Docker em execução, com contêineres Linux.
+- Docker Compose com suporte a `up --wait`.
+- Porta local `18081` disponível.
+
+Na **raiz do projeto**, caso ainda não tenha instalado as dependências e o navegador:
+
+```powershell
+npm ci
+npx playwright install chromium
+```
+
+Para executar a suíte completa da atividade:
+
+```powershell
+npm run test:atividade:e2e
+```
+
+Esse comando:
+
+1. Remove eventuais contêineres remanescentes do projeto Docker exclusivo `atividade-e2e`.
+2. Constrói e inicia banco (`atividade_e2e` em `tmpfs`), API e frontend `atividade/` usando `compose.atividade.e2e.yml` na porta `127.0.0.1:18081`.
+3. Aguarda todos os healthchecks ficarem saudáveis.
+4. Restaura o banco (`TRUNCATE` + `database/seed.sql`) antes de cada teste para garantir independência entre cenários e executa os **15 casos de teste** (cobrindo os 10 cenários obrigatórios) no Chromium real.
+5. Salva os logs dos serviços em `e2e-artifacts/atividade-compose.log` e encerra os contêineres ao final, mesmo em caso de falha.
+
+Comandos úteis da suíte da atividade:
+
+| Comando | Finalidade |
+| --- | --- |
+| `npm run test:atividade:e2e` | Subir ambiente isolado, executar todos os testes da atividade e encerrar os contêineres. |
+| `npm run test:atividade:e2e -- --headed` | Executar com a janela do navegador visível. |
+| `npm run test:atividade:e2e:list` | Listar os testes da atividade sem iniciar o Docker. |
+| `npm run test:atividade:e2e:typecheck` | Verificar os tipos TypeScript da suíte da atividade. |
+| `npm run test:atividade:e2e:report` | Abrir o relatório HTML da última execução. |
+
+Cenários cobertos em `e2e-atividade/atividade.spec.ts`:
+
+- **Listagem inicial:** alunos do `database/seed.sql` exibidos na tabela ao abrir a página.
+- **Cadastro válido, atualização da lista e limpeza do formulário:** cadastro via interface com mensagem `"Aluno cadastrado com sucesso."`, atualização automática da tabela sem recarregar a página e campos `RA` e `Nome` limpos.
+- **Persistência:** aluno cadastrado permanece visível após `page.reload()`.
+- **Campos obrigatórios:** bloqueio de envio quando `RA`, `Nome` ou ambos estão vazios.
+- **RA inválido:** rejeição de valores negativos, zero, decimais e maiores que `2147483647`.
+- **Nome inválido:** rejeição de nomes com menos de 3 caracteres, considerando espaços nas extremidades.
+- **RA duplicado:** rejeição pela API (HTTP 409), exibição da mensagem de erro e preservação dos campos preenchidos.
+- **Lista vazia:** exibição da mensagem `"Nenhum aluno cadastrado."` quando o banco não possui alunos.
+
+Se a execução for interrompida à força e os contêineres permanecerem ativos, encerre o ambiente com:
+
+```powershell
+docker compose -f compose.atividade.e2e.yml -p atividade-e2e down --remove-orphans
+```
 
 ## Desenvolvimento da API
 
